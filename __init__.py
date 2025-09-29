@@ -18,10 +18,16 @@
 
 bl_info = {
         "name": "DKS RizomUV",
-        "description": "RizomUV Bridge",
+        "description": (
+                "The RizomUV Bridge provides the user with an easy to use UI which makes "
+                "transferring objects and UV maps between Blender and RizomUV as simple as "
+                "clicking a button.\n\nSeamless export and import between Blender and RizomUV, "
+                "original objects are untouched, only UV data is transferred back to Blender.\n"
+                "Multiple UV sets support."
+        ),
         "author": "DigiKrafting.Studio",
-        "version": (0, 6, 0),
-        "blender": (2, 80, 0),
+        "version": (1, 0, 0),
+        "blender": (4, 0, 0),
         "location": "Info Toolbar, File -> Import, File -> Export",
         "wiki_url":    "https://github.com/DigiKrafting/blender_addon_rizom_uv/wiki",
         "tracker_url": "https://github.com/DigiKrafting/blender_addon_rizom_uv/issues",
@@ -39,8 +45,8 @@ class dks_ruv_addon_prefs(bpy.types.AddonPreferences):
         option_ruv_exe : bpy.props.StringProperty(
                 name="RizomUV Executable",
                 subtype='FILE_PATH',
-                default=r"C:\Program Files\Rizom Lab\RizomUV VS RS 2018.0\rizomuv.exe",
-        )     
+                default=r"C:\Program Files\Rizom Lab\RizomUV 2025\rizomuv.exe",
+        )
         option_export_folder : bpy.props.StringProperty(
                 name="Export Folder Name",
                 default="eXport",
@@ -112,11 +118,13 @@ def register():
     bpy.types.TOPBAR_MT_file_export.append(dks_ruv_menu_func_export)
     bpy.types.TOPBAR_MT_file_import.append(dks_ruv_menu_func_import)
 
-    if bpy.context.preferences.addons[__package__].preferences.option_display_type=='Buttons':
-    
+    prefs = bpy.context.preferences.addons[__package__].preferences
+
+    if prefs.option_display_type == 'Buttons':
+
         bpy.types.TOPBAR_HT_upper_bar.append(dks_ruv_draw_btns)
 
-    elif bpy.context.preferences.addons[__package__].preferences.option_display_type=='Menu':
+    elif prefs.option_display_type == 'Menu':
 
         register_class(dks_ruv_menu)
         bpy.types.TOPBAR_MT_editor_menus.append(dks_draw_ruv_menu)
@@ -126,9 +134,19 @@ def unregister():
     bpy.types.TOPBAR_MT_file_import.remove(dks_ruv_menu_func_import)
     bpy.types.TOPBAR_MT_file_export.remove(dks_ruv_menu_func_export)
     
-    if bpy.context.preferences.addons[__package__].preferences.option_display_type=='Buttons':
+    prefs = bpy.context.preferences.addons[__package__].preferences
+
+    if prefs.option_display_type == 'Buttons':
 
         bpy.types.TOPBAR_HT_upper_bar.remove(dks_ruv_draw_btns)
+
+    elif prefs.option_display_type == 'Menu':
+
+        bpy.types.TOPBAR_MT_editor_menus.remove(dks_draw_ruv_menu)
+        try:
+            unregister_class(dks_ruv_menu)
+        except RuntimeError:
+            pass
 
     dks_ruv.unregister()
 

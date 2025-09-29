@@ -1,51 +1,36 @@
 # Blender Addon RizomUV
 
-Bridge/Pipeline/Workflow import/export for RizomUV.
+The RizomUV Bridge provides the user with an easy to use UI which makes transferring objects and UV maps between Blender and RizomUV as simple as clicking a button.
 
-# Features
+Seamless export and import between Blender and RizomUV, original objects are untouched, only UV data is transferred back to Blender.
+Multiple UV sets support.
 
-- One click RizomUV FBX Export (Exports selected object to export folder and opens file in RizomUV)
-- One click RizomUV FBX Import (Imports exported FBX and transfers UV data on selected object)
+## Features
 
-# Required Blender Version
+* One-click FBX export to RizomUV 2025 with safe defaults for Blender 4.x.
+* Automatic round-trip import that transfers every UV map from RizomUV back to the active Blender mesh.
+* Non-destructive workflow – only UV layers are updated, leaving your geometry and modifiers untouched.
+* Configurable RizomUV executable path and export folder to match your pipeline.
 
-blender_addon_rizom_uv 0.1.1+
+## Requirements
 
-2.80.0
+* Blender 4.0 or newer (tested with Blender 4.5).
+* RizomUV 2025 or newer.
 
-Prior to blender_addon_rizom_uv 0.1.1
+## Usage Notes
 
-2.79.0
-\* Will likely work in previous versions but untested.
+* Save the `.blend` file before running an export. The add-on uses the file location to create the export directory and can optionally auto-save before each transfer.
+* FBX files are named after the active object and stored in the configured export directory alongside the `.blend` file.
 
-# IMPORTANT USAGE NOTES 
+## Installation
 
-\* Make sure you have a saved .blend file before using the auto import/export features, then saving before import/export is then not required. The addon needs the file location to know where to create the export folder used for import/export of the files.
+Download the latest release archive from [https://github.com/DigiKrafting/blender_addon_rizom_uv/releases/latest](https://github.com/DigiKrafting/blender_addon_rizom_uv/releases/latest) and install it from *Edit → Preferences → Add-ons → Install...* in Blender.
 
-- File Naming Convention
+## Screenshots
 
-    File names are derived from the selected object name or your blender file name.
-
-# Installation
-
-Download either the tar.gz or zip from [https://github.com/DigiKrafting/blender_addon_rizom_uv/releases/latest](https://github.com/DigiKrafting/blender_addon_rizom_uv/releases/latest)
-
-Installing an Addon in Blender
-
-- [File]->[User Preferences]
-- Select [Add-ons] Tab
-- Click [Install Add-on from File..]
-
-# Screenshots
-
-![alt](/screenshots/ruv_prefs.png)
-
-![alt](/screenshots/ruv_import.png)
-
-![alt](/screenshots/ruv_imported.png)
-
-![alt](/screenshots/ruv_btns.png)
-
-![alt](/screenshots/ruv_menu.png)
-
-![alt](/screenshots/ruv_standard.png)
+![Addon preferences showing RizomUV 2025 path](/screenshots/ruv_prefs.png)
+![Export operator buttons](/screenshots/ruv_import.png)
+![Imported UVs in Blender](/screenshots/ruv_imported.png)
+![Toolbar buttons](/screenshots/ruv_btns.png)
+![Topbar menu entry](/screenshots/ruv_menu.png)
+![Standard workflow panel](/screenshots/ruv_standard.png)
