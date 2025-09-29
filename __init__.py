@@ -93,6 +93,14 @@ class dks_ruv_addon_prefs(bpy.types.AddonPreferences):
                 default=r"C:\Program Files\Rizom Lab\RizomUV 2025.0\rizomuv.exe",
         )
 
+        # NOTE: Blender may still reference this deprecated property when
+        # loading stored preferences from previous versions of the add-on.
+        # Keeping the definition avoids attribute errors during registration.
+        option_export_folder : bpy.props.StringProperty(  # type: ignore[assignment]
+                name="Deprecated export folder",
+                options={'HIDDEN'},
+        )
+
         def draw(self, context):
 
                 layout = self.layout
