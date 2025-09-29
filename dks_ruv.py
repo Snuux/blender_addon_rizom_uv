@@ -26,6 +26,11 @@ import bpy
 from bpy.types import Object
 from bpy.utils import register_class, unregister_class
 
+import tempfile
+
+
+EXPORT_SUBDIR_NAME = "rizomuv_bridge"
+
 
 def _prefs():
     return bpy.context.preferences.addons[__package__].preferences
@@ -38,14 +43,14 @@ def _require_saved_file(operator) -> bool:
     return True
 
 
+def get_export_directory() -> Path:
+    base_dir = Path(tempfile.gettempdir()) / EXPORT_SUBDIR_NAME
+    base_dir.mkdir(parents=True, exist_ok=True)
+    return base_dir
+
+
 def _export_directory() -> Path:
-    prefs = _prefs()
-    folder_name = prefs.option_export_folder.strip().strip("\\/") or "eXport"
-    sanitized = bpy.path.clean_name(folder_name) or "eXport"
-    base_path = Path(bpy.path.abspath("//"))
-    export_dir = (base_path / sanitized).resolve()
-    export_dir.mkdir(parents=True, exist_ok=True)
-    return export_dir
+    return get_export_directory()
 
 
 def _export_filename(obj: Object) -> Path:

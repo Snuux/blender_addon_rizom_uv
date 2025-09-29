@@ -19,13 +19,11 @@
 bl_info = {
         "name": "DKS RizomUV",
         "description": (
-                "The RizomUV Bridge provides the user with an easy to use UI which makes "
-                "transferring objects and UV maps between Blender and RizomUV as simple as "
-                "clicking a button.\n\nSeamless export and import between Blender and RizomUV, "
-                "original objects are untouched, only UV data is transferred back to Blender.\n"
-                "Multiple UV sets support."
+                "Bridge Blender and RizomUV with an intuitive one-click workflow. "
+                "Export meshes, unwrap them in RizomUV, and bring every UV set back "
+                "without disturbing the original objects."
         ),
-        "author": "DigiKrafting.Studio",
+        "author": "DigiKrafting.Studio, Snuux",
         "version": (1, 0, 0),
         "blender": (4, 0, 0),
         "location": "Info Toolbar, File -> Import, File -> Export",
@@ -38,6 +36,30 @@ import bpy
 from bpy.utils import register_class, unregister_class
 from . import dks_ruv
 
+
+class DKS_RUV_OT_open_export_directory(bpy.types.Operator):
+
+        bl_idname = "dks_ruv.open_export_directory"
+        bl_label = "Open Export Folder"
+        bl_description = "Open the temporary folder used for RizomUV transfers"
+
+        def execute(self, context):
+
+                export_dir = dks_ruv.get_export_directory()
+                try:
+                        export_dir.mkdir(parents=True, exist_ok=True)
+                except OSError as exc:
+                        self.report({'ERROR'}, f"Unable to prepare the export folder: {exc}")
+                        return {'CANCELLED'}
+
+                result = bpy.ops.wm.path_open(filepath=str(export_dir))
+                if 'CANCELLED' in result:
+                        self.report({'ERROR'}, "Blender could not open the export folder.")
+                        return {'CANCELLED'}
+
+                return {'FINISHED'}
+
+
 class dks_ruv_addon_prefs(bpy.types.AddonPreferences):
 
         bl_idname = __package__
@@ -45,12 +67,8 @@ class dks_ruv_addon_prefs(bpy.types.AddonPreferences):
         option_ruv_exe : bpy.props.StringProperty(
                 name="RizomUV Executable",
                 subtype='FILE_PATH',
-                default=r"C:\Program Files\Rizom Lab\RizomUV 2025\rizomuv.exe",
+                default=r"C:\Program Files\Rizom Lab\RizomUV 2025.0\rizomuv.exe",
         )
-        option_export_folder : bpy.props.StringProperty(
-                name="Export Folder Name",
-                default="eXport",
-        )  
         option_save_before_export : bpy.props.BoolProperty(
                 name="Save Before Export",
                 default=True,
@@ -67,9 +85,12 @@ class dks_ruv_addon_prefs(bpy.types.AddonPreferences):
                 box=layout.box()
                 box.prop(self, 'option_display_type')
                 box.prop(self, 'option_ruv_exe')
+
                 box=layout.box()
-                box.prop(self, 'option_export_folder')
-                box.label(text='Automatically created as a sub folder relative to the saved .blend file. * Do NOT include any "\\".',icon='INFO')
+                export_dir = dks_ruv.get_export_directory()
+                box.label(text="Temporary export folder:")
+                box.label(text=str(export_dir), icon='FILE_FOLDER')
+                box.operator("dks_ruv.open_export_directory", icon='FILEBROWSER')
                 box.prop(self, 'option_save_before_export')
 
 class dks_ruv_menu(bpy.types.Menu):
@@ -105,6 +126,7 @@ def dks_ruv_draw_btns(self, context):
         row.operator('dks_ruv.import',text="RUV",icon="IMPORT")
 
 classes = (
+    DKS_RUV_OT_open_export_directory,
     dks_ruv_addon_prefs,
 )
 
