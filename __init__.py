@@ -26,7 +26,7 @@ bl_info = {
         "author": "DigiKrafting.Studio, Snuux",
         "version": (1, 0, 0),
         "blender": (4, 0, 0),
-        "location": "Info Toolbar, File -> Import, File -> Export",
+        "location": "File -> Import, File -> Export",
         "wiki_url":    "https://github.com/DigiKrafting/blender_addon_rizom_uv/wiki",
         "tracker_url": "https://github.com/DigiKrafting/blender_addon_rizom_uv/issues",
         "category": "Import-Export",
@@ -83,58 +83,32 @@ class dks_ruv_addon_prefs(bpy.types.AddonPreferences):
                 subtype='DIR_PATH',
                 default="",
         )
-        option_display_type : bpy.props.EnumProperty(
-                items=[('Buttons', "Buttons", "Use Buttons"),('Menu', "Menu", "Append a Menu to Main Menu"),('Hide', "Import/Export", "Use only Import/Export Menu's"),],
-                name="Display Type",
-                default='Buttons',
-        )
         def draw(self, context):
 
                 layout = self.layout
 
-                box=layout.box()
-                box.prop(self, 'option_display_type')
+                box = layout.box()
                 box.prop(self, 'option_ruv_exe')
 
-                box=layout.box()
-                export_dir = dks_ruv.get_export_directory()
+                box = layout.box()
                 box.label(text="Export folder:")
                 box.prop(self, 'option_export_folder')
-                box.label(text=str(export_dir), icon='FILE_FOLDER')
-                box.operator("dks_ruv.open_export_directory", icon='FILEBROWSER')
+
+                try:
+                        export_dir = dks_ruv.get_export_directory()
+                except Exception as exc:  # pragma: no cover - UI feedback only
+                        box.label(text="Unable to determine folder", icon='ERROR')
+                        box.label(text=str(exc))
+                else:
+                        box.label(text=str(export_dir), icon='FILE_FOLDER')
+                        box.operator("dks_ruv.open_export_directory", icon='FILEBROWSER')
                 box.prop(self, 'option_save_before_export')
-
-class dks_ruv_menu(bpy.types.Menu):
-
-    bl_label = " " + bl_info['name']
-    bl_idname = "dks_ruv.menu"
-
-    def draw(self, context):
-            
-        layout = self.layout
-
-        self.layout.operator('dks_ruv.export',icon="EXPORT")
-        self.layout.operator('dks_ruv.import',icon="IMPORT")
-
-def dks_draw_ruv_menu(self, context):
-
-        layout = self.layout
-        layout.menu(dks_ruv_menu.bl_idname,icon="COLLAPSEMENU")
 
 def dks_ruv_menu_func_export(self, context):
     self.layout.operator("dks_ruv.export")
 
 def dks_ruv_menu_func_import(self, context):
     self.layout.operator("dks_ruv.import")
-
-def dks_ruv_draw_btns(self, context):
-    
-    if context.region.alignment != 'RIGHT':
-
-        layout = self.layout
-        row = layout.row(align=True)
-        row.operator('dks_ruv.export',text="RUV",icon="EXPORT")
-        row.operator('dks_ruv.import',text="RUV",icon="IMPORT")
 
 classes = (
     DKS_RUV_OT_open_export_directory,
@@ -151,35 +125,10 @@ def register():
     bpy.types.TOPBAR_MT_file_export.append(dks_ruv_menu_func_export)
     bpy.types.TOPBAR_MT_file_import.append(dks_ruv_menu_func_import)
 
-    prefs = bpy.context.preferences.addons[__package__].preferences
-
-    if prefs.option_display_type == 'Buttons':
-
-        bpy.types.TOPBAR_HT_upper_bar.append(dks_ruv_draw_btns)
-
-    elif prefs.option_display_type == 'Menu':
-
-        register_class(dks_ruv_menu)
-        bpy.types.TOPBAR_MT_editor_menus.append(dks_draw_ruv_menu)
-        
 def unregister():
 
     bpy.types.TOPBAR_MT_file_import.remove(dks_ruv_menu_func_import)
     bpy.types.TOPBAR_MT_file_export.remove(dks_ruv_menu_func_export)
-    
-    prefs = bpy.context.preferences.addons[__package__].preferences
-
-    if prefs.option_display_type == 'Buttons':
-
-        bpy.types.TOPBAR_HT_upper_bar.remove(dks_ruv_draw_btns)
-
-    elif prefs.option_display_type == 'Menu':
-
-        bpy.types.TOPBAR_MT_editor_menus.remove(dks_draw_ruv_menu)
-        try:
-            unregister_class(dks_ruv_menu)
-        except RuntimeError:
-            pass
 
     dks_ruv.unregister()
 
@@ -188,4 +137,4 @@ def unregister():
 
 if __name__ == "__main__":
 
-	register()
+    register()
