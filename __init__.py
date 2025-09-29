@@ -32,9 +32,27 @@ bl_info = {
         "category": "Import-Export",
 }
 
+from pathlib import Path
+import tempfile
+
 import bpy
 from bpy.utils import register_class, unregister_class
 from . import dks_ruv
+
+
+def _ui_export_directory():
+
+        getter = getattr(dks_ruv, "get_export_directory", None)
+        if callable(getter):
+                return getter()
+
+        legacy_getter = getattr(dks_ruv, "_export_directory", None)
+        if callable(legacy_getter):
+                return legacy_getter()
+
+        fallback = Path(tempfile.gettempdir()) / getattr(dks_ruv, "EXPORT_SUBDIR_NAME", "rizomuv_bridge")
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
 
 
 class DKS_RUV_OT_open_export_directory(bpy.types.Operator):
@@ -45,7 +63,7 @@ class DKS_RUV_OT_open_export_directory(bpy.types.Operator):
 
         def execute(self, context):
 
-                export_dir = dks_ruv.get_export_directory()
+                export_dir = _ui_export_directory()
                 try:
                         export_dir.mkdir(parents=True, exist_ok=True)
                 except OSError as exc:
@@ -69,10 +87,6 @@ class dks_ruv_addon_prefs(bpy.types.AddonPreferences):
                 subtype='FILE_PATH',
                 default=r"C:\Program Files\Rizom Lab\RizomUV 2025.0\rizomuv.exe",
         )
-        option_save_before_export : bpy.props.BoolProperty(
-                name="Save Before Export",
-                default=True,
-        )
         option_export_folder : bpy.props.StringProperty(
                 name="Custom Export Folder",
                 description=(
@@ -95,15 +109,13 @@ class dks_ruv_addon_prefs(bpy.types.AddonPreferences):
                 box.prop(self, 'option_export_folder')
 
                 try:
-                        export_dir = dks_ruv.get_export_directory()
+                        export_dir = _ui_export_directory()
                 except Exception as exc:  # pragma: no cover - UI feedback only
                         box.label(text="Unable to determine folder", icon='ERROR')
                         box.label(text=str(exc))
                 else:
                         box.label(text=str(export_dir), icon='FILE_FOLDER')
                         box.operator("dks_ruv.open_export_directory", icon='FILEBROWSER')
-                box.prop(self, 'option_save_before_export')
-
 def dks_ruv_menu_func_export(self, context):
     self.layout.operator("dks_ruv.export")
 

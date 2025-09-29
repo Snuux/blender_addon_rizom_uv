@@ -306,9 +306,6 @@ class dks_ruv_export(bpy.types.Operator):
             obj.select_set(True)
         context.view_layer.objects.active = active
 
-        if prefs.option_save_before_export:
-            bpy.ops.wm.save_mainfile()
-
         bpy.ops.export_scene.fbx(
             filepath=str(export_file),
             use_selection=True,
