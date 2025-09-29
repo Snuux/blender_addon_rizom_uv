@@ -20,13 +20,21 @@ from __future__ import annotations
 
 from pathlib import Path
 from subprocess import Popen
-from typing import Iterable
+from typing import Dict, Iterable, List, Optional, Tuple
+
+import json
+import tempfile
 
 import bpy
 from bpy.types import Object
 from bpy.utils import register_class, unregister_class
 
-import tempfile
+
+try:  # Optional RizomUV Link integration
+    from RizomUVLink import CRizomUVLink, CZEx  # type: ignore
+except Exception:  # pragma: no cover - optional dependency, may not exist
+    CRizomUVLink = None  # type: ignore
+    CZEx = RuntimeError  # type: ignore
 
 
 EXPORT_SUBDIR_NAME = "rizomuv_bridge"
@@ -58,24 +66,44 @@ def _export_filename(obj: Object) -> Path:
     return _export_directory() / f"{clean_object_name}_ruv.fbx"
 
 
-def _prepare_object_mode(obj: Object) -> str:
-    view_layer = bpy.context.view_layer
-    if view_layer.objects.active is not obj:
-        view_layer.objects.active = obj
-    obj.select_set(True)
-    previous_mode = obj.mode
-    if obj.mode != 'OBJECT':
-        bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
-    return previous_mode
+def _selection_snapshot(context) -> Tuple[Dict[str, bool], Optional[Object]]:
+    scene = context.scene
+    selection = {obj.name: obj.select_get() for obj in scene.objects}
+    active = context.view_layer.objects.active
+    return selection, active
 
 
-def _restore_mode(obj: Object, previous_mode: str) -> None:
-    if previous_mode and previous_mode != 'OBJECT':
-        view_layer = bpy.context.view_layer
-        if view_layer.objects.active is not obj:
+def _restore_selection(context, selection: Dict[str, bool], active: Optional[Object]) -> None:
+    scene = context.scene
+    for obj in scene.objects:
+        obj.select_set(selection.get(obj.name, False))
+    if active:
+        restored_active = scene.objects.get(active.name)
+        context.view_layer.objects.active = restored_active
+    else:
+        context.view_layer.objects.active = None
+
+
+def _ensure_objects_object_mode(context, objects: Iterable[Object]) -> Dict[str, str]:
+    view_layer = context.view_layer
+    previous_modes: Dict[str, str] = {}
+    for obj in objects:
+        if obj.mode != 'OBJECT':
             view_layer.objects.active = obj
+            previous_modes[obj.name] = obj.mode
+            bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
+    return previous_modes
+
+
+def _restore_object_modes(context, previous_modes: Dict[str, str]) -> None:
+    view_layer = context.view_layer
+    for obj_name, mode in previous_modes.items():
+        obj = bpy.data.objects.get(obj_name)
+        if obj is None:
+            continue
+        view_layer.objects.active = obj
         try:
-            bpy.ops.object.mode_set(mode=previous_mode, toggle=False)
+            bpy.ops.object.mode_set(mode=mode, toggle=False)
         except RuntimeError:
             pass
 
@@ -121,7 +149,7 @@ def _copy_uv_layers(source: Object, target: Object) -> None:
     dst_mesh.update()
 
 
-def _import_fbx(filepath: Path) -> Object:
+def _import_fbx(filepath: Path) -> List[Object]:
     existing_names = {obj.name_full for obj in bpy.data.objects}
     result = bpy.ops.import_scene.fbx(filepath=str(filepath), axis_forward='-Z', axis_up='Y')
     if 'FINISHED' not in result:
@@ -131,7 +159,7 @@ def _import_fbx(filepath: Path) -> Object:
     if not new_objects:
         raise RuntimeError("No mesh objects were imported from RizomUV.")
 
-    return new_objects[0]
+    return new_objects
 
 
 def _cleanup_import(objects: Iterable[Object]) -> None:
@@ -142,6 +170,70 @@ def _cleanup_import(objects: Iterable[Object]) -> None:
             bpy.data.meshes.remove(mesh)
 
 
+def _state_file() -> Path:
+    return _export_directory() / "last_export.json"
+
+
+def _load_state() -> Dict[str, object]:
+    path = _state_file()
+    if not path.exists():
+        return {}
+    try:
+        with path.open("r", encoding="utf8") as handle:
+            return json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_state(state: Dict[str, object]) -> None:
+    path = _state_file()
+    try:
+        with path.open("w", encoding="utf8") as handle:
+            json.dump(state, handle, indent=2)
+    except OSError:
+        pass
+
+
+def _connect_or_launch_rizom(exe_path: Path, state: Dict[str, object]):
+    if CRizomUVLink is None:
+        return None
+
+    link = CRizomUVLink()
+    port = state.get("port")
+    if isinstance(port, int):
+        try:
+            link.Connect(port)
+            return link
+        except Exception:
+            port = None
+
+    try:
+        port = link.RunRizomUV(str(exe_path))
+    except CZEx:  # type: ignore[misc]
+        return None
+    except Exception:
+        return None
+
+    state["port"] = port
+    _save_state(state)
+    return link
+
+
+def _send_to_rizom(exe_path: Path, export_file: Path, operator, state: Dict[str, object]) -> None:
+    link = _connect_or_launch_rizom(exe_path, state)
+    if link is not None:
+        try:
+            link.Load({"File": {"Path": str(export_file)}})
+            return
+        except Exception as exc:
+            operator.report({'WARNING'}, f"Unable to communicate with RizomUV instance: {exc}")
+
+    try:
+        Popen([str(exe_path), str(export_file)])
+    except OSError as exc:
+        operator.report({'WARNING'}, f"FBX exported, but RizomUV could not be launched: {exc}")
+
+
 class dks_ruv_export(bpy.types.Operator):
     bl_idname = "dks_ruv.export"
     bl_label = "RizomUV"
@@ -149,21 +241,32 @@ class dks_ruv_export(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        active = context.view_layer.objects.active
-        return active is not None and active.type == 'MESH'
+        return any(obj.type == 'MESH' for obj in context.selected_objects)
 
     def execute(self, context):
         if not _require_saved_file(self):
             return {'CANCELLED'}
 
-        if not context.selected_objects:
-            self.report({'ERROR'}, "Select at least one object to export to RizomUV.")
+        selected_meshes = [obj for obj in context.selected_objects if obj.type == 'MESH']
+        if not selected_meshes:
+            self.report({'ERROR'}, "Select at least one mesh object to export to RizomUV.")
             return {'CANCELLED'}
 
         prefs = _prefs()
+        state = _load_state()
+
+        selection_snapshot = _selection_snapshot(context)
+        mode_snapshot = _ensure_objects_object_mode(context, selected_meshes)
+
         active = context.view_layer.objects.active
-        previous_mode = _prepare_object_mode(active)
-        export_file = _export_filename(active)
+        if active not in selected_meshes:
+            active = selected_meshes[0]
+        export_file = (_export_filename(active) if len(selected_meshes) == 1 else (_export_directory() / "selection_ruv.fbx"))
+
+        bpy.ops.object.select_all(action='DESELECT')
+        for obj in selected_meshes:
+            obj.select_set(True)
+        context.view_layer.objects.active = active
 
         if prefs.option_save_before_export:
             bpy.ops.wm.save_mainfile()
@@ -181,17 +284,21 @@ class dks_ruv_export(bpy.types.Operator):
             use_mesh_modifiers=True,
         )
 
-        _restore_mode(active, previous_mode)
+        _restore_object_modes(context, mode_snapshot)
+        _restore_selection(context, *selection_snapshot)
 
         exe_path = Path(prefs.option_ruv_exe).expanduser()
         if not exe_path.is_file():
             self.report({'WARNING'}, f"FBX exported to {export_file}, but RizomUV executable was not found: {exe_path}")
             return {'FINISHED'}
 
-        try:
-            Popen([str(exe_path), str(export_file)])
-        except OSError as exc:
-            self.report({'WARNING'}, f"FBX exported, but RizomUV could not be launched: {exc}")
+        state.update({
+            "objects": [obj.name for obj in selected_meshes],
+            "filepath": str(export_file),
+        })
+        _save_state(state)
+
+        _send_to_rizom(exe_path, export_file, self, state)
 
         return {'FINISHED'}
 
@@ -203,45 +310,77 @@ class dks_ruv_import(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        active = context.view_layer.objects.active
-        return active is not None and active.type == 'MESH'
+        state = _load_state()
+        if not state.get("objects"):
+            return False
+        for name in state.get("objects", []):
+            obj = bpy.data.objects.get(name)
+            if obj and obj.type == 'MESH':
+                return True
+        return False
 
     def execute(self, context):
         if not _require_saved_file(self):
             return {'CANCELLED'}
 
-        active = context.view_layer.objects.active
-        import_file = _export_filename(active)
+        state = _load_state()
+        export_objects = [bpy.data.objects.get(name) for name in state.get("objects", [])]
+        export_objects = [obj for obj in export_objects if obj and obj.type == 'MESH']
+        if not export_objects:
+            self.report({'ERROR'}, "No previous RizomUV export found for the current scene.")
+            return {'CANCELLED'}
+
+        import_path = state.get("filepath")
+        if import_path:
+            import_file = Path(import_path)
+        else:
+            active = context.view_layer.objects.active
+            if not active or active.type != 'MESH':
+                self.report({'ERROR'}, "Unable to determine which RizomUV export to import.")
+                return {'CANCELLED'}
+            import_file = _export_filename(active)
 
         if not import_file.is_file():
             self.report({'ERROR'}, f"No RizomUV export found at {import_file}")
             return {'CANCELLED'}
 
-        previous_mode = _prepare_object_mode(active)
+        selection_snapshot = _selection_snapshot(context)
+        mode_snapshot = _ensure_objects_object_mode(context, export_objects)
 
         try:
-            imported_obj = _import_fbx(import_file)
+            imported_objects = _import_fbx(import_file)
         except RuntimeError as exc:
             self.report({'ERROR'}, str(exc))
-            _restore_mode(active, previous_mode)
+            _restore_object_modes(context, mode_snapshot)
+            _restore_selection(context, *selection_snapshot)
             return {'CANCELLED'}
 
-        try:
-            _copy_uv_layers(imported_obj, active)
-        except RuntimeError as exc:
-            self.report({'ERROR'}, str(exc))
-            bpy.context.view_layer.objects.active = active
-            _cleanup_import([imported_obj])
-            _restore_mode(active, previous_mode)
-            return {'CANCELLED'}
+        imported_by_name = {obj.name: obj for obj in imported_objects}
+        updated_targets: List[Object] = []
+        for target in export_objects:
+            source = imported_by_name.get(target.name)
+            if not source:
+                self.report({'WARNING'}, f"Imported data for '{target.name}' was not found.")
+                continue
+            try:
+                _copy_uv_layers(source, target)
+            except RuntimeError as exc:
+                self.report({'ERROR'}, str(exc))
+                _cleanup_import(imported_objects)
+                _restore_object_modes(context, mode_snapshot)
+                _restore_selection(context, *selection_snapshot)
+                return {'CANCELLED'}
+            updated_targets.append(target)
 
-        bpy.context.view_layer.objects.active = active
-        _cleanup_import([imported_obj])
+        _cleanup_import(imported_objects)
 
-        active.select_set(True)
-        bpy.context.view_layer.objects.active = active
+        if updated_targets:
+            for obj in updated_targets:
+                obj.data.update()
 
-        _restore_mode(active, previous_mode)
+        _restore_object_modes(context, mode_snapshot)
+        _restore_selection(context, *selection_snapshot)
+
         return {'FINISHED'}
 
 
