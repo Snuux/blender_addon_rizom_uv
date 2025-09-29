@@ -72,7 +72,17 @@ class dks_ruv_addon_prefs(bpy.types.AddonPreferences):
         option_save_before_export : bpy.props.BoolProperty(
                 name="Save Before Export",
                 default=True,
-        )     
+        )
+        option_export_folder : bpy.props.StringProperty(
+                name="Custom Export Folder",
+                description=(
+                        "Optional folder that overrides the temporary export "
+                        "location. Leave empty to use Blender's temporary "
+                        "directory."
+                ),
+                subtype='DIR_PATH',
+                default="",
+        )
         option_display_type : bpy.props.EnumProperty(
                 items=[('Buttons', "Buttons", "Use Buttons"),('Menu', "Menu", "Append a Menu to Main Menu"),('Hide', "Import/Export", "Use only Import/Export Menu's"),],
                 name="Display Type",
@@ -88,7 +98,8 @@ class dks_ruv_addon_prefs(bpy.types.AddonPreferences):
 
                 box=layout.box()
                 export_dir = dks_ruv.get_export_directory()
-                box.label(text="Temporary export folder:")
+                box.label(text="Export folder:")
+                box.prop(self, 'option_export_folder')
                 box.label(text=str(export_dir), icon='FILE_FOLDER')
                 box.operator("dks_ruv.open_export_directory", icon='FILEBROWSER')
                 box.prop(self, 'option_save_before_export')

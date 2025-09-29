@@ -52,9 +52,47 @@ def _require_saved_file(operator) -> bool:
 
 
 def get_export_directory() -> Path:
+    """Return the export directory, creating it if necessary.
+
+    The directory can be overridden via the add-on preferences. We keep the
+    previous behaviour of using Blender's temporary directory as a fallback in
+    case the preference is unset or invalid. This mirrors the behaviour prior
+    to the preference being removed, ensuring older installations keep working
+    without triggering attribute errors when the property is still referenced
+    from stored user settings.
+    """
+
     base_dir = Path(tempfile.gettempdir()) / EXPORT_SUBDIR_NAME
-    base_dir.mkdir(parents=True, exist_ok=True)
-    return base_dir
+
+    try:
+        prefs = _prefs()
+    except KeyError:
+        prefs = None
+    except AttributeError:
+        prefs = None
+
+    custom_dir: Optional[Path] = None
+    if prefs is not None:
+        # ``option_export_folder`` existed in older releases of the add-on. It
+        # may still be present in saved user preferences, so we access it
+        # defensively and treat an empty string as "use the default".
+        export_folder = getattr(prefs, "option_export_folder", "")
+        if export_folder:
+            # ``bpy.path.abspath`` resolves Blender-specific tokens like "//".
+            resolved = Path(bpy.path.abspath(export_folder)).expanduser()
+            custom_dir = resolved
+
+    target_dir = custom_dir or base_dir
+
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        # Fall back to the temporary directory if the custom path is invalid or
+        # cannot be created for any reason.
+        base_dir.mkdir(parents=True, exist_ok=True)
+        target_dir = base_dir
+
+    return target_dir
 
 
 def _export_directory() -> Path:
