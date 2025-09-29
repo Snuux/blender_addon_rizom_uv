@@ -52,47 +52,37 @@ def _require_saved_file(operator) -> bool:
 
 
 def get_export_directory() -> Path:
-    """Return the export directory, creating it if necessary.
+    """Return the export directory used for RizomUV transfers.
 
-    The directory can be overridden via the add-on preferences. We keep the
-    previous behaviour of using Blender's temporary directory as a fallback in
-    case the preference is unset or invalid. This mirrors the behaviour prior
-    to the preference being removed, ensuring older installations keep working
-    without triggering attribute errors when the property is still referenced
-    from stored user settings.
+    The folder is always located inside the operating system's temporary
+    directory (or Blender's override, if available) to avoid accidental exports
+    to arbitrary user-specified locations. The directory is created on demand
+    and a stable location is returned for the duration of the Blender session.
     """
 
-    base_dir = Path(tempfile.gettempdir()) / EXPORT_SUBDIR_NAME
+    candidate_roots: List[Path] = []
 
-    try:
-        prefs = _prefs()
-    except KeyError:
-        prefs = None
-    except AttributeError:
-        prefs = None
+    blender_temp = getattr(bpy.app, "tempdir", None)
+    if blender_temp:
+        candidate_roots.append(Path(blender_temp))
 
-    custom_dir: Optional[Path] = None
-    if prefs is not None:
-        # ``option_export_folder`` existed in older releases of the add-on. It
-        # may still be present in saved user preferences, so we access it
-        # defensively and treat an empty string as "use the default".
-        export_folder = getattr(prefs, "option_export_folder", "")
-        if export_folder:
-            # ``bpy.path.abspath`` resolves Blender-specific tokens like "//".
-            resolved = Path(bpy.path.abspath(export_folder)).expanduser()
-            custom_dir = resolved
+    system_temp = Path(tempfile.gettempdir())
+    if system_temp not in candidate_roots:
+        candidate_roots.append(system_temp)
 
-    target_dir = custom_dir or base_dir
+    for root in candidate_roots:
+        target_dir = root / EXPORT_SUBDIR_NAME
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            continue
+        else:
+            return target_dir
 
-    try:
-        target_dir.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        # Fall back to the temporary directory if the custom path is invalid or
-        # cannot be created for any reason.
-        base_dir.mkdir(parents=True, exist_ok=True)
-        target_dir = base_dir
-
-    return target_dir
+    # As a last resort, create a dedicated temporary directory that is unique
+    # to the current invocation.
+    fallback_dir = Path(tempfile.mkdtemp(prefix=f"{EXPORT_SUBDIR_NAME}_"))
+    return fallback_dir
 
 
 def _export_directory() -> Path:

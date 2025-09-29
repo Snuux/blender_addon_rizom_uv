@@ -70,7 +70,12 @@ class DKS_RUV_OT_open_export_directory(bpy.types.Operator):
                         self.report({'ERROR'}, f"Unable to prepare the export folder: {exc}")
                         return {'CANCELLED'}
 
-                result = bpy.ops.wm.path_open(filepath=str(export_dir))
+                try:
+                        resolved_path = export_dir.resolve()
+                except OSError:
+                        resolved_path = export_dir
+
+                result = bpy.ops.wm.path_open(filepath=str(resolved_path))
                 if 'CANCELLED' in result:
                         self.report({'ERROR'}, "Blender could not open the export folder.")
                         return {'CANCELLED'}
@@ -87,16 +92,7 @@ class dks_ruv_addon_prefs(bpy.types.AddonPreferences):
                 subtype='FILE_PATH',
                 default=r"C:\Program Files\Rizom Lab\RizomUV 2025.0\rizomuv.exe",
         )
-        option_export_folder : bpy.props.StringProperty(
-                name="Custom Export Folder",
-                description=(
-                        "Optional folder that overrides the temporary export "
-                        "location. Leave empty to use Blender's temporary "
-                        "directory."
-                ),
-                subtype='DIR_PATH',
-                default="",
-        )
+
         def draw(self, context):
 
                 layout = self.layout
@@ -105,8 +101,7 @@ class dks_ruv_addon_prefs(bpy.types.AddonPreferences):
                 box.prop(self, 'option_ruv_exe')
 
                 box = layout.box()
-                box.label(text="Export folder:")
-                box.prop(self, 'option_export_folder')
+                box.label(text="Temporary export folder:")
 
                 try:
                         export_dir = _ui_export_directory()
@@ -114,8 +109,9 @@ class dks_ruv_addon_prefs(bpy.types.AddonPreferences):
                         box.label(text="Unable to determine folder", icon='ERROR')
                         box.label(text=str(exc))
                 else:
-                        box.label(text=str(export_dir), icon='FILE_FOLDER')
-                        box.operator("dks_ruv.open_export_directory", icon='FILEBROWSER')
+                        row = box.row(align=True)
+                        row.label(text=str(export_dir), icon='FILE_FOLDER')
+                        row.operator("dks_ruv.open_export_directory", icon='FILEBROWSER')
 def dks_ruv_menu_func_export(self, context):
     self.layout.operator("dks_ruv.export")
 
