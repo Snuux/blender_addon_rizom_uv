@@ -1,4 +1,6 @@
-# Blender Addon RizomUV
+# Blender RizomUV Bridge
+
+Currently WIP!
 
 The RizomUV Bridge gives Blender artists a friendly, human-readable workflow for sending meshes to RizomUV and bringing the finished UVs back home. In just a couple of clicks you can launch RizomUV from inside Blender, unwrap your assets, and return to shading work with confidence.
 
@@ -26,7 +28,7 @@ Seamless export and import between Blender and RizomUV keeps your original objec
 
 ## Installation
 
-Download the latest release archive from [https://github.com/DigiKrafting/blender_addon_rizom_uv/releases/latest](https://github.com/DigiKrafting/blender_addon_rizom_uv/releases/latest) and install it from *Edit → Preferences → Add-ons → Install...* in Blender.
+Download this repo as .zip and install it from *Edit → Preferences → Add-ons → Install...* in Blender.
 
 ## Release Notes
 
